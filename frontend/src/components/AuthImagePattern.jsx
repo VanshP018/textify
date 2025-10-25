@@ -1,8 +1,12 @@
+// frontend/src/components/AuthImagePattern.jsx
+import React from 'react';
+
 const AuthImagePattern = ({ title, subtitle }) => {
   return (
     <div className="hidden lg:flex flex-col items-center justify-center bg-base-200 p-12 text-center">
+      {/* Correct path: public folder assets are served from the root */}
       <img
-        src="./public/image.png"
+        src="/image.png"
         alt="Auth Visual"
         className="w-2/3 max-w-lg mb-8 rounded-2xl shadow-lg object-cover"
       />
@@ -11,8 +15,5 @@ const AuthImagePattern = ({ title, subtitle }) => {
     </div>
   );
 };
-
-
-
 
 export default AuthImagePattern;
