@@ -7,6 +7,7 @@ export const useChatStore = create((set, get) => ({
   messages: [],
   users: [],
   selectedUser: null,
+  isTyping: false, // whether the selected user is typing
   isUsersLoading: false,
   isMessagesLoading: false,
 
@@ -61,11 +62,25 @@ export const useChatStore = create((set, get) => ({
         messages: [...get().messages, newMessage],
       });
     });
+
+    // subscribe to typing events for the selected user
+    socket.on("typing", ({ from, isTyping }) => {
+      try {
+        const selectedId = selectedUser?._id?.toString ? selectedUser._id.toString() : String(selectedUser._id);
+        const fromId = from?.toString ? from.toString() : String(from);
+        if (fromId === selectedId) {
+          set({ isTyping: !!isTyping });
+        }
+      } catch (err) {
+        // ignore
+      }
+    });
   },
 
   unsubscribeFromMessages: () => {
     const socket = useAuthStore.getState().socket;
     socket.off("newMessage");
+    socket.off("typing");
   },
 
   setSelectedUser: (selectedUser) => set({ selectedUser }),
