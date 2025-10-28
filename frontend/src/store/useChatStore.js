@@ -61,6 +61,11 @@ export const useChatStore = create((set, get) => ({
       set({
         messages: [...get().messages, newMessage],
       });
+
+        // emit delivered status to backend
+        try {
+          axiosInstance.post(`/messages/read/${newMessage._id}`);
+        } catch (err) {}
     });
 
     // subscribe to typing events for the selected user
@@ -75,12 +80,24 @@ export const useChatStore = create((set, get) => ({
         // ignore
       }
     });
+
+      // subscribe to message status updates
+      socket.on("messageStatus", ({ messageId, delivered, deliveredAt, read, readAt }) => {
+        set({
+          messages: get().messages.map((msg) =>
+            msg._id === messageId
+              ? { ...msg, delivered, deliveredAt, read, readAt }
+              : msg
+          ),
+        });
+      });
   },
 
   unsubscribeFromMessages: () => {
     const socket = useAuthStore.getState().socket;
     socket.off("newMessage");
     socket.off("typing");
+      socket.off("messageStatus");
   },
 
   setSelectedUser: (selectedUser) => set({ selectedUser }),
