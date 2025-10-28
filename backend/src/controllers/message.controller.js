@@ -57,12 +57,26 @@ export const sendMessage = async (req, res) => {
 
     await newMessage.save();
 
+    // prepare a JSON-safe message object (stringify ObjectIds)
+    const messageObj = newMessage.toObject ? newMessage.toObject() : JSON.parse(JSON.stringify(newMessage));
+    if (messageObj._id) messageObj._id = String(messageObj._id);
+    if (messageObj.senderId) messageObj.senderId = String(messageObj.senderId);
+    if (messageObj.receiverId) messageObj.receiverId = String(messageObj.receiverId);
+
+    // emit to receiver if online
     const receiverSocketId = getReceiverSocketId(receiverId);
     if (receiverSocketId) {
-      io.to(receiverSocketId).emit("newMessage", newMessage);
+      io.to(receiverSocketId).emit("newMessage", messageObj);
     }
 
-    res.status(201).json(newMessage);
+    // also emit to sender's other connected sockets (if any) so multiple tabs receive the message
+    const senderSocketId = getReceiverSocketId(String(senderId));
+    if (senderSocketId) {
+      io.to(senderSocketId).emit("newMessage", messageObj);
+    }
+
+    // return the saved message (with string ids)
+    res.status(201).json(messageObj);
   } catch (error) {
     console.log("Error in sendMessage controller: ", error.message);
     res.status(500).json({ error: "Internal server error" });
