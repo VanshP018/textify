@@ -32,6 +32,22 @@ io.on("connection", (socket) => {
     delete userSocketMap[userId];
     io.emit("getOnlineUsers", Object.keys(userSocketMap));
   });
+
+  // receive typing events from clients and forward to receiver
+  // payload: { to: <receiverId>, isTyping: true|false }
+  socket.on("typing", (payload) => {
+    try {
+      const { to, isTyping } = payload || {};
+      if (!to) return;
+
+      const receiverSocketId = userSocketMap[to];
+      if (receiverSocketId) {
+        io.to(receiverSocketId).emit("typing", { from: userId, isTyping });
+      }
+    } catch (err) {
+      console.error("Error handling typing event:", err.message);
+    }
+  });
 });
 
 export { io, app, server };
