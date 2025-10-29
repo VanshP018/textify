@@ -27,19 +27,10 @@ io.on("connection", (socket) => {
   // io.emit() is used to send events to all the connected clients
   io.emit("getOnlineUsers", Object.keys(userSocketMap));
 
-  socket.on("disconnect", async () => {
+  socket.on("disconnect", () => {
     console.log("A user disconnected", socket.id);
     delete userSocketMap[userId];
     io.emit("getOnlineUsers", Object.keys(userSocketMap));
-    // update lastSeen in User model
-    if (userId) {
-      try {
-        const User = (await import("../models/user.model.js")).default;
-        await User.findByIdAndUpdate(userId, { lastSeen: new Date() });
-      } catch (err) {
-        console.error("Failed to update lastSeen:", err.message);
-      }
-    }
   });
 
   // receive typing events from clients and forward to receiver
