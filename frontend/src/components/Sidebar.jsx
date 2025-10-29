@@ -1,111 +1,125 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useChatStore } from "../store/useChatStore";
 import { useAuthStore } from "../store/useAuthStore";
 import SidebarSkeleton from "./skeletons/SidebarSkeleton";
 import { Users } from "lucide-react";
 
 const Sidebar = () => {
-  const { getUsers, users, selectedUser, setSelectedUser, isUsersLoading } = useChatStore();
+  const { getUsers, users, selectedUser, setSelectedUser, isUsersLoading } =
+    useChatStore();
+  const { onlineUsers = [], authUser } = useAuthStore();
 
-  const { onlineUsers, authUser } = useAuthStore();
   const [showOnlineOnly, setShowOnlineOnly] = useState(() => {
     try {
-      const v = localStorage.getItem("sidebar.showOnlineOnly");
-      return v ? JSON.parse(v) : false;
-    } catch (err) {
+      const stored = localStorage.getItem("sidebar.showOnlineOnly");
+      return stored ? JSON.parse(stored) : false;
+    } catch {
       return false;
     }
   });
 
-  useEffect(() => {
+  const handleToggleOnlineOnly = (checked) => {
+    setShowOnlineOnly(checked);
+    try {
+      localStorage.setItem("sidebar.showOnlineOnly", JSON.stringify(checked));
+    } catch (err) {
+      console.warn("Failed to save sidebar preference:", err);
+    }
+  };
+
+  const fetchUsers = useCallback(() => {
     getUsers();
   }, [getUsers]);
 
-  // normalize ids as strings before comparing (socket may emit string ids)
-  const onlineSet = new Set((onlineUsers || []).map((id) => String(id)));
+  useEffect(() => {
+    fetchUsers();
+  }, [fetchUsers]);
+
+  const onlineSet = new Set(onlineUsers.map((id) => String(id)));
   const filteredUsers = showOnlineOnly
-    ? users.filter((user) => onlineSet.has(String(user._id)))
+    ? users.filter((u) => onlineSet.has(String(u._id)))
     : users;
+
+  const currentUserId = String(authUser?._id || "");
+  const otherOnlineCount = onlineUsers.filter((id) => String(id) !== currentUserId).length;
 
   if (isUsersLoading) return <SidebarSkeleton />;
 
   return (
     <aside className="h-full w-20 lg:w-72 border-r border-base-300 flex flex-col transition-all duration-200">
+      {/* Header */}
       <div className="border-b border-base-300 w-full p-5">
         <div className="flex items-center gap-2">
           <Users className="size-6" />
           <span className="font-medium hidden lg:block">Contacts</span>
         </div>
+
         <div className="mt-3 hidden lg:flex items-center gap-2">
-          <label className="cursor-pointer flex items-center gap-2">
+          <label
+            className="cursor-pointer flex items-center gap-2"
+            aria-label="Toggle show online only"
+          >
             <input
               type="checkbox"
               checked={showOnlineOnly}
-              onChange={(e) => {
-                const val = e.target.checked;
-                setShowOnlineOnly(val);
-                try {
-                  localStorage.setItem("sidebar.showOnlineOnly", JSON.stringify(val));
-                } catch (err) {}
-              }}
+              onChange={(e) => handleToggleOnlineOnly(e.target.checked)}
               className="checkbox checkbox-sm"
+              aria-checked={showOnlineOnly}
             />
             <span className="text-sm">Show online only</span>
           </label>
-          <span className="text-xs text-zinc-500">({
-            // show other online users count (exclude current user if present)
-            (() => {
-              try {
-                const authId = authUser?._id ? String(authUser._id) : null;
-                return (onlineUsers || []).filter((id) => String(id) !== authId).length;
-              } catch (err) {
-                return (onlineUsers || []).length;
-              }
-            })()
-          } online)</span>
+          <span className="text-xs text-zinc-500">
+            ({otherOnlineCount} online)
+          </span>
         </div>
       </div>
 
+      {/* User list */}
       <div className="overflow-y-auto w-full py-3">
-        {filteredUsers.map((user) => (
-          <button
-            key={user._id}
-            onClick={() => setSelectedUser(user)}
-            className={`
-              w-full p-3 flex items-center gap-3
-              hover:bg-base-300 transition-colors
-              ${selectedUser?._id === user._id ? "bg-base-300 ring-1 ring-base-300" : ""}
-            `}
-          >
-            <div className="relative mx-auto lg:mx-0">
-              <img
-                src={user.profilePic || "/avatar.png"}
-                alt={user.name}
-                className="size-12 object-cover rounded-full"
-              />
-              {onlineUsers.includes(user._id) && (
-                <span
-                  className="absolute bottom-0 right-0 size-3 bg-green-500 
-                  rounded-full ring-2 ring-zinc-900"
+        {filteredUsers.map((user) => {
+          const isOnline = onlineSet.has(String(user._id));
+          const isSelected = selectedUser?._id === user._id;
+
+          return (
+            <button
+              key={user._id}
+              onClick={() => setSelectedUser(user)}
+              className={`w-full p-3 flex items-center gap-3 hover:bg-base-300 transition-colors ${
+                isSelected ? "bg-base-300 ring-1 ring-base-300" : ""
+              }`}
+              aria-pressed={isSelected}
+            >
+              <div className="relative mx-auto lg:mx-0 transition-transform duration-150 hover:scale-105">
+                <img
+                  src={user.profilePic || "/avatar.png"}
+                  alt={user.fullName}
+                  className="size-12 object-cover rounded-full"
                 />
-              )}
-            </div>
-
-            {/* User info - only visible on larger screens */}
-            <div className="hidden lg:block text-left min-w-0">
-              <div className="font-medium truncate">{user.fullName}</div>
-              <div className="text-sm text-zinc-400">
-                {onlineUsers.includes(user._id) ? "Online" : "Offline"}
+                {isOnline && (
+                  <span className="absolute bottom-0 right-0 size-3 bg-green-500 rounded-full ring-2 ring-zinc-900" />
+                )}
               </div>
-            </div>
-          </button>
-        ))}
 
+              {/* User info - only visible on larger screens */}
+              <div className="hidden lg:block text-left min-w-0">
+                <div className="font-medium truncate">{user.fullName}</div>
+                <div className="text-sm text-zinc-400">
+                  {isOnline ? "Online" : "Offline"}
+                </div>
+              </div>
+            </button>
+          );
+        })}
+
+        {/* Empty state */}
         {filteredUsers.length === 0 && (
-          <div className="text-center text-zinc-500 py-4">No online users</div>
+          <div className="text-center text-zinc-500 py-4">
+            No {showOnlineOnly ? "online" : ""} users
+          </div>
         )}
       </div>
     </aside>
   );
 };
+
 export default Sidebar;
