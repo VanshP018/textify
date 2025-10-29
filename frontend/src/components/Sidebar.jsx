@@ -7,15 +7,24 @@ import { Users } from "lucide-react";
 const Sidebar = () => {
   const { getUsers, users, selectedUser, setSelectedUser, isUsersLoading } = useChatStore();
 
-  const { onlineUsers } = useAuthStore();
-  const [showOnlineOnly, setShowOnlineOnly] = useState(false);
+  const { onlineUsers, authUser } = useAuthStore();
+  const [showOnlineOnly, setShowOnlineOnly] = useState(() => {
+    try {
+      const v = localStorage.getItem("sidebar.showOnlineOnly");
+      return v ? JSON.parse(v) : false;
+    } catch (err) {
+      return false;
+    }
+  });
 
   useEffect(() => {
     getUsers();
   }, [getUsers]);
 
+  // normalize ids as strings before comparing (socket may emit string ids)
+  const onlineSet = new Set((onlineUsers || []).map((id) => String(id)));
   const filteredUsers = showOnlineOnly
-    ? users.filter((user) => onlineUsers.includes(user._id))
+    ? users.filter((user) => onlineSet.has(String(user._id)))
     : users;
 
   if (isUsersLoading) return <SidebarSkeleton />;
@@ -27,18 +36,33 @@ const Sidebar = () => {
           <Users className="size-6" />
           <span className="font-medium hidden lg:block">Contacts</span>
         </div>
-        {/* TODO: Online filter toggle */}
         <div className="mt-3 hidden lg:flex items-center gap-2">
           <label className="cursor-pointer flex items-center gap-2">
             <input
               type="checkbox"
               checked={showOnlineOnly}
-              onChange={(e) => setShowOnlineOnly(e.target.checked)}
+              onChange={(e) => {
+                const val = e.target.checked;
+                setShowOnlineOnly(val);
+                try {
+                  localStorage.setItem("sidebar.showOnlineOnly", JSON.stringify(val));
+                } catch (err) {}
+              }}
               className="checkbox checkbox-sm"
             />
             <span className="text-sm">Show online only</span>
           </label>
-          <span className="text-xs text-zinc-500">({onlineUsers.length - 1} online)</span>
+          <span className="text-xs text-zinc-500">({
+            // show other online users count (exclude current user if present)
+            (() => {
+              try {
+                const authId = authUser?._id ? String(authUser._id) : null;
+                return (onlineUsers || []).filter((id) => String(id) !== authId).length;
+              } catch (err) {
+                return (onlineUsers || []).length;
+              }
+            })()
+          } online)</span>
         </div>
       </div>
 
