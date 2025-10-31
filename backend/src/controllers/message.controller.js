@@ -30,7 +30,7 @@ export const getMessages = async (req, res) => {
 
     res.status(200).json(messages);
   } catch (error) {
-    console.log("Error in getMessages controller: ", error.message);
+    console.error("Error in getMessages controller: ", error.message);
     res.status(500).json({ error: "Internal server error" });
   }
 };
@@ -53,18 +53,75 @@ export const sendMessage = async (req, res) => {
       receiverId,
       text,
       image: imageUrl,
+      delivered: false,
+      deliveredAt: null,
+      read: false,
+      readAt: null,
     });
 
     await newMessage.save();
 
+    // prepare a JSON-safe message object (stringify ObjectIds)
+    const messageObj = newMessage.toObject ? newMessage.toObject() : JSON.parse(JSON.stringify(newMessage));
+    if (messageObj._id) messageObj._id = String(messageObj._id);
+    if (messageObj.senderId) messageObj.senderId = String(messageObj.senderId);
+    if (messageObj.receiverId) messageObj.receiverId = String(messageObj.receiverId);
+
+    // emit to receiver if online
     const receiverSocketId = getReceiverSocketId(receiverId);
     if (receiverSocketId) {
-      io.to(receiverSocketId).emit("newMessage", newMessage);
+      io.to(receiverSocketId).emit("newMessage", messageObj);
+      // mark as delivered and notify sender
+      newMessage.delivered = true;
+      newMessage.deliveredAt = new Date();
+      await newMessage.save();
+      io.to(senderSocketId).emit("messageStatus", {
+        messageId: newMessage._id,
+        delivered: true,
+        deliveredAt: newMessage.deliveredAt,
+        read: false,
+        readAt: null,
+      });
     }
 
-    res.status(201).json(newMessage);
+    // also emit to sender's other connected sockets (if any) so multiple tabs receive the message
+    const senderSocketId = getReceiverSocketId(String(senderId));
+    if (senderSocketId) {
+      io.to(senderSocketId).emit("newMessage", messageObj);
+    }
+
+    // return the saved message (with string ids)
+    res.status(201).json(messageObj);
   } catch (error) {
-    console.log("Error in sendMessage controller: ", error.message);
+    console.error("Error in sendMessage controller: ", error.message);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+// mark message as read
+export const markMessageRead = async (req, res) => {
+  try {
+    const { id: messageId } = req.params;
+    const userId = req.user._id;
+    const message = await Message.findById(messageId);
+    if (!message) return res.status(404).json({ error: "Message not found" });
+    if (String(message.receiverId) !== String(userId)) return res.status(403).json({ error: "Forbidden" });
+    message.read = true;
+    message.readAt = new Date();
+    await message.save();
+    // notify sender
+    const senderSocketId = getReceiverSocketId(String(message.senderId));
+    if (senderSocketId) {
+      io.to(senderSocketId).emit("messageStatus", {
+        messageId: message._id,
+        delivered: true,
+        deliveredAt: message.deliveredAt,
+        read: true,
+        readAt: message.readAt,
+      });
+    }
+    res.status(200).json({ success: true });
+  } catch (err) {
     res.status(500).json({ error: "Internal server error" });
   }
 };

@@ -28,6 +28,9 @@ export default [
       ...react.configs.recommended.rules,
       ...react.configs["jsx-runtime"].rules,
       ...reactHooks.configs.recommended.rules,
+      // Disable console usage in production builds; allow console.warn/error
+      // during development for debugging.
+      "no-console": process.env.NODE_ENV === "production" ? ["error", { allow: ["warn", "error"] }] : "off",
       "react/jsx-no-target-blank": "off",
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
       "react/prop-types": "off",

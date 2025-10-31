@@ -4,6 +4,8 @@ import User from "../models/user.model.js";
 
 config();
 
+const verbose = process.env.SEED_VERBOSE === "true";
+
 const seedUsers = [
   // Female Users
   {
@@ -104,8 +106,8 @@ const seedDatabase = async () => {
   try {
     await connectDB();
 
-    await User.insertMany(seedUsers);
-    console.log("Database seeded successfully");
+  await User.insertMany(seedUsers);
+  if (verbose) console.log("Database seeded successfully");
   } catch (error) {
     console.error("Error seeding database:", error);
   }

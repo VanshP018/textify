@@ -1,4 +1,5 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
+import { useAuthStore } from "../store/useAuthStore";
 import { useChatStore } from "../store/useChatStore";
 import { Image, Send, X } from "lucide-react";
 import toast from "react-hot-toast";
@@ -8,6 +9,19 @@ const MessageInput = () => {
   const [imagePreview, setImagePreview] = useState(null);
   const fileInputRef = useRef(null);
   const { sendMessage } = useChatStore();
+  const socket = useAuthStore.getState().socket;
+  const { selectedUser } = useChatStore();
+
+  const typingTimeoutRef = useRef(null);
+
+  const emitTyping = (isTyping) => {
+    try {
+      if (!socket || !selectedUser) return;
+      socket.emit("typing", { to: selectedUser._id, isTyping });
+    } catch (err) {
+      console.error("emitTyping error:", err);
+    }
+  };
 
   const handleImageChange = (e) => {
     const file = e.target.files[0];
@@ -38,6 +52,13 @@ const MessageInput = () => {
         image: imagePreview,
       });
 
+      // stop typing when message is sent
+      emitTyping(false);
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
+
       // Clear form
       setText("");
       setImagePreview(null);
@@ -46,6 +67,31 @@ const MessageInput = () => {
       console.error("Failed to send message:", error);
     }
   };
+
+  // handle typing on input changes: emit start, then debounce stop
+  const handleTextChange = (e) => {
+    const v = e.target.value;
+    setText(v);
+    // emit typing start
+    emitTyping(true);
+
+    // debounce stop after 1000ms of inactivity
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    typingTimeoutRef.current = setTimeout(() => {
+      emitTyping(false);
+      typingTimeoutRef.current = null;
+    }, 1000);
+  };
+
+  useEffect(() => {
+    return () => {
+      // emit stop on unmount
+      try {
+        emitTyping(false);
+      } catch (err) {}
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    };
+  }, []);
 
   return (
     <div className="p-4 w-full">
@@ -76,7 +122,7 @@ const MessageInput = () => {
             className="w-full input input-bordered rounded-lg input-sm sm:input-md"
             placeholder="Don't hesitate. Take your shot !"
             value={text}
-            onChange={(e) => setText(e.target.value)}
+            onChange={handleTextChange}
           />
           <input
             type="file"
