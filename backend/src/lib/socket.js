@@ -19,7 +19,7 @@ export function getReceiverSocketId(userId) {
 const userSocketMap = {}; // {userId: socketId}
 
 io.on("connection", (socket) => {
-  console.log("A user connected", socket.id);
+  if (process.env.NODE_ENV !== "production") console.log("A user connected", socket.id);
 
   const userId = socket.handshake.query.userId;
   if (userId) userSocketMap[userId] = socket.id;
@@ -28,9 +28,25 @@ io.on("connection", (socket) => {
   io.emit("getOnlineUsers", Object.keys(userSocketMap));
 
   socket.on("disconnect", () => {
-    console.log("A user disconnected", socket.id);
+    if (process.env.NODE_ENV !== "production") console.log("A user disconnected", socket.id);
     delete userSocketMap[userId];
     io.emit("getOnlineUsers", Object.keys(userSocketMap));
+  });
+
+  // receive typing events from clients and forward to receiver
+  // payload: { to: <receiverId>, isTyping: true|false }
+  socket.on("typing", (payload) => {
+    try {
+      const { to, isTyping } = payload || {};
+      if (!to) return;
+
+      const receiverSocketId = userSocketMap[to];
+      if (receiverSocketId) {
+        io.to(receiverSocketId).emit("typing", { from: userId, isTyping });
+      }
+    } catch (err) {
+      console.error("Error handling typing event:", err.message);
+    }
   });
 });
 

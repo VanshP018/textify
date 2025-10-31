@@ -40,6 +40,11 @@ export const protectRoute = async (req, res, next) => {
       throw new AppError(401, "Token has been invalidated");
     }
 
+    // Check if token is blacklisted
+    if (tokenBlacklist.has(token)) {
+      return res.status(401).json({ message: "Token has been invalidated" });
+    }
+
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
     if (!decoded) {
@@ -49,6 +54,11 @@ export const protectRoute = async (req, res, next) => {
     // Check token expiration
     if (decoded.exp && Date.now() >= decoded.exp * 1000) {
       throw new AppError(401, "Token has expired");
+    }
+
+    // Check token expiration
+    if (decoded.exp && Date.now() >= decoded.exp * 1000) {
+      return res.status(401).json({ message: "Token has expired" });
     }
 
     const user = await User.findById(decoded.userId).select("-password");
@@ -77,3 +87,4 @@ export const protectRoute = async (req, res, next) => {
     }
   }
 };
+// auth fix
